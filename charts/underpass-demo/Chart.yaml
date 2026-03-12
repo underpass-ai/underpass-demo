@@ -1,0 +1,12 @@
+apiVersion: v2
+name: underpass-demo
+description: Interactive TUI demo for the Underpass agent platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/underpass-ai/underpass-demo
+sources:
+  - https://github.com/underpass-ai/underpass-demo
+maintainers:
+  - name: underpass-ai
+    url: https://github.com/underpass-ai

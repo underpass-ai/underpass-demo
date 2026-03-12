@@ -12,6 +12,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/underpass-ai/underpass-demo/internal/adapters/embedded"
@@ -22,12 +24,20 @@ import (
 
 func main() {
 	embeddedMode := flag.Bool("embedded", false, "Run with in-memory ship data (zero infrastructure)")
+	idle := flag.Bool("idle", false, "Keep process alive without launching TUI (for K8s pods)")
 	valkeyAddr := flag.String("valkey-addr", "localhost:6379", "Valkey address")
 	valkeyPass := flag.String("valkey-pass", "", "Valkey password")
 	valkeyDB := flag.Int("valkey-db", 0, "Valkey database")
 	valkeyPrefix := flag.String("valkey-prefix", "tool_policy", "Valkey key prefix")
 	natsURL := flag.String("nats-url", "", "NATS URL (optional, for event stream)")
 	flag.Parse()
+
+	if *idle {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+		<-sig
+		return
+	}
 
 	if err := run(*embeddedMode, *valkeyAddr, *valkeyPass, *valkeyDB, *valkeyPrefix, *natsURL); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

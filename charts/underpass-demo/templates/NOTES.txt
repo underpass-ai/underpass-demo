@@ -1,0 +1,8 @@
+USS Underpass Demo deployed!
+
+Connect to the TUI:
+
+  kubectl exec -it deploy/{{ include "underpass-demo.fullname" . }} -- /app/tlctl --embedded
+
+Keys:
+  m=mission  b=bridge  s=systems  t=thompson  a=agents  l=log  q=quit

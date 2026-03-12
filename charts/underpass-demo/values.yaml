@@ -1,0 +1,61 @@
+# -- Number of replicas
+replicaCount: 1
+
+image:
+  # -- Container image registry + repository
+  repository: registry.underpassai.com/underpass-demo
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Overrides the image tag (defaults to Chart appVersion)
+  tag: ""
+
+# -- Image pull secrets
+imagePullSecrets: []
+# -- Override the release name
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Create a ServiceAccount
+  create: true
+  # -- Annotations for the ServiceAccount
+  annotations: {}
+  # -- ServiceAccount name (generated if empty)
+  name: ""
+
+# -- Pod-level annotations
+podAnnotations: {}
+
+# -- Pod-level security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container-level security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# -- Resource requests and limits
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 64Mi
+
+# -- Node selector
+nodeSelector: {}
+# -- Tolerations
+tolerations: []
+# -- Affinity rules
+affinity: {}
