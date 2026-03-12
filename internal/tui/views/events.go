@@ -92,12 +92,12 @@ func (m EventsModel) View() string {
 	var b strings.Builder
 
 	heading := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("147"))
-	b.WriteString(heading.Render("  NATS EVENT STREAM"))
+	b.WriteString(heading.Render("  SHIP'S LOG — EVENT STREAM"))
 	b.WriteString("\n\n")
 
 	if m.subscriber == nil {
 		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("246")).Render(
-			"  No NATS connection configured. Start with --nats-url flag."))
+			"  No event stream configured. Start with --nats-url or --embedded flag."))
 		return b.String()
 	}
 

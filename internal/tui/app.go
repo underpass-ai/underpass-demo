@@ -14,25 +14,25 @@ import (
 type View int
 
 const (
-	ViewDashboard View = iota
-	ViewRankings
+	ViewMission View = iota
+	ViewBridge
+	ViewSystems
 	ViewSampling
-	ViewEvents
-	ViewDegradation
+	ViewLog
 )
 
 func viewName(v View) string {
 	switch v {
-	case ViewDashboard:
-		return "Dashboard"
-	case ViewRankings:
-		return "Rankings"
+	case ViewMission:
+		return "Mission"
+	case ViewBridge:
+		return "Bridge"
+	case ViewSystems:
+		return "Systems"
 	case ViewSampling:
-		return "Sampling"
-	case ViewEvents:
-		return "Events"
-	case ViewDegradation:
-		return "Degradation"
+		return "Thompson Sampling"
+	case ViewLog:
+		return "Ship's Log"
 	default:
 		return "Unknown"
 	}
@@ -51,11 +51,11 @@ type Model struct {
 	width       int
 	height      int
 
-	dashboard   views.DashboardModel
-	rankings    views.RankingsModel
-	sampling    views.SamplingModel
-	events      views.EventsModel
-	degradation views.DegradationModel
+	mission  views.MissionModel
+	bridge   views.DashboardModel
+	systems  views.RankingsModel
+	sampling views.SamplingModel
+	log      views.EventsModel
 
 	initialised map[View]bool
 }
@@ -63,19 +63,19 @@ type Model struct {
 // NewModel creates the root model with all dependencies injected.
 func NewModel(deps Deps) Model {
 	return Model{
-		currentView: ViewDashboard,
+		currentView: ViewMission,
 		deps:        deps,
-		dashboard:   views.NewDashboardModel(deps.PolicyReader),
-		rankings:    views.NewRankingsModel(deps.PolicyReader),
+		mission:     views.NewMissionModel(deps.PolicyReader),
+		bridge:      views.NewDashboardModel(deps.PolicyReader),
+		systems:     views.NewRankingsModel(deps.PolicyReader),
 		sampling:    views.NewSamplingModel(deps.PolicyReader),
-		events:      views.NewEventsModel(deps.EventSub),
-		degradation: views.NewDegradationModel(deps.PolicyReader),
-		initialised: map[View]bool{ViewDashboard: true},
+		log:         views.NewEventsModel(deps.EventSub),
+		initialised: map[View]bool{ViewMission: true},
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return m.dashboard.Init()
+	return m.mission.Init()
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -84,16 +84,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
-		case "d":
-			return m.switchView(ViewDashboard)
-		case "r":
-			return m.switchView(ViewRankings)
+		case "m":
+			return m.switchView(ViewMission)
+		case "b":
+			return m.switchView(ViewBridge)
 		case "s":
+			return m.switchView(ViewSystems)
+		case "t":
 			return m.switchView(ViewSampling)
-		case "e":
-			return m.switchView(ViewEvents)
-		case "!":
-			return m.switchView(ViewDegradation)
+		case "l":
+			return m.switchView(ViewLog)
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -103,16 +103,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Delegate to active view.
 	var cmd tea.Cmd
 	switch m.currentView {
-	case ViewDashboard:
-		m.dashboard, cmd = m.dashboard.Update(msg)
-	case ViewRankings:
-		m.rankings, cmd = m.rankings.Update(msg)
+	case ViewMission:
+		m.mission, cmd = m.mission.Update(msg)
+	case ViewBridge:
+		m.bridge, cmd = m.bridge.Update(msg)
+	case ViewSystems:
+		m.systems, cmd = m.systems.Update(msg)
 	case ViewSampling:
 		m.sampling, cmd = m.sampling.Update(msg)
-	case ViewEvents:
-		m.events, cmd = m.events.Update(msg)
-	case ViewDegradation:
-		m.degradation, cmd = m.degradation.Update(msg)
+	case ViewLog:
+		m.log, cmd = m.log.Update(msg)
 	}
 
 	return m, cmd
@@ -122,22 +122,22 @@ func (m Model) View() string {
 	var b strings.Builder
 
 	// Title bar.
-	title := StyleTitle.Render(fmt.Sprintf(" UNDERPASS DEMO  |  %s ", viewName(m.currentView)))
+	title := StyleTitle.Render(fmt.Sprintf(" USS UNDERPASS  |  %s ", viewName(m.currentView)))
 	b.WriteString(title)
 	b.WriteString("\n\n")
 
 	// Active view content.
 	switch m.currentView {
-	case ViewDashboard:
-		b.WriteString(m.dashboard.View())
-	case ViewRankings:
-		b.WriteString(m.rankings.View())
+	case ViewMission:
+		b.WriteString(m.mission.View())
+	case ViewBridge:
+		b.WriteString(m.bridge.View())
+	case ViewSystems:
+		b.WriteString(m.systems.View())
 	case ViewSampling:
 		b.WriteString(m.sampling.View())
-	case ViewEvents:
-		b.WriteString(m.events.View())
-	case ViewDegradation:
-		b.WriteString(m.degradation.View())
+	case ViewLog:
+		b.WriteString(m.log.View())
 	}
 
 	// Help bar at bottom.
@@ -150,55 +150,38 @@ func (m Model) View() string {
 func (m Model) switchView(target View) (tea.Model, tea.Cmd) {
 	m.currentView = target
 
-	if m.initialised[target] {
-		// Re-init to refresh data.
-		var cmd tea.Cmd
-		switch target {
-		case ViewDashboard:
-			cmd = m.dashboard.Init()
-		case ViewRankings:
-			cmd = m.rankings.Init()
-		case ViewSampling:
-			cmd = m.sampling.Init()
-		case ViewEvents:
-			cmd = m.events.Init()
-		case ViewDegradation:
-			cmd = m.degradation.Init()
-		}
-		return m, cmd
-	}
-
+	// Always re-init to refresh data.
 	m.initialised[target] = true
 	var cmd tea.Cmd
 	switch target {
-	case ViewDashboard:
-		cmd = m.dashboard.Init()
-	case ViewRankings:
-		cmd = m.rankings.Init()
+	case ViewMission:
+		cmd = m.mission.Init()
+	case ViewBridge:
+		cmd = m.bridge.Init()
+	case ViewSystems:
+		cmd = m.systems.Init()
 	case ViewSampling:
 		cmd = m.sampling.Init()
-	case ViewEvents:
-		cmd = m.events.Init()
-	case ViewDegradation:
-		cmd = m.degradation.Init()
+	case ViewLog:
+		cmd = m.log.Init()
 	}
 	return m, cmd
 }
 
 func (m Model) renderHelp() string {
 	bindings := []struct{ key, desc string }{
-		{"d", "dashboard"},
-		{"r", "rankings"},
-		{"s", "sampling"},
-		{"e", "events"},
-		{"!", "degradation"},
+		{"m", "mission"},
+		{"b", "bridge"},
+		{"s", "systems"},
+		{"t", "thompson"},
+		{"l", "log"},
 		{"q", "quit"},
 	}
 
 	var parts []string
-	for _, b := range bindings {
-		k := StyleHelpKey.Render(b.key)
-		d := StyleHelpDesc.Render(b.desc)
+	for _, bind := range bindings {
+		k := StyleHelpKey.Render(bind.key)
+		d := StyleHelpDesc.Render(bind.desc)
 		parts = append(parts, k+" "+d)
 	}
 	bar := lipgloss.JoinHorizontal(lipgloss.Top, strings.Join(parts, "  "))

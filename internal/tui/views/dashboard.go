@@ -86,16 +86,16 @@ func (m DashboardModel) View() string {
 		}
 	}
 
-	b.WriteString(dashHeading.Render("  POLICY OVERVIEW"))
+	b.WriteString(dashHeading.Render("  BRIDGE — Ship Systems Overview"))
 	b.WriteString("\n\n")
-	b.WriteString(fmt.Sprintf("  Policies active     %s\n", dashValue.Render(fmt.Sprintf("%d", len(m.policies)))))
-	b.WriteString(fmt.Sprintf("  Context signatures  %s\n", dashValue.Render(fmt.Sprintf("%d", len(contexts)))))
+	b.WriteString(fmt.Sprintf("  Active subsystems   %s\n", dashValue.Render(fmt.Sprintf("%d", len(m.policies)))))
+	b.WriteString(fmt.Sprintf("  Operational zones   %s\n", dashValue.Render(fmt.Sprintf("%d", len(contexts)))))
 	b.WriteString(fmt.Sprintf("  Total invocations   %s\n", dashValue.Render(fmt.Sprintf("%d", totalSamples))))
-	b.WriteString(fmt.Sprintf("  Last refresh        %s\n", dashMuted.Render(m.loadedAt.Format("15:04:05"))))
+	b.WriteString(fmt.Sprintf("  Last scan           %s\n", dashMuted.Render(m.loadedAt.Format("15:04:05"))))
 	b.WriteString("\n")
 
 	// Confidence distribution.
-	b.WriteString(dashHeading.Render("  CONFIDENCE DISTRIBUTION"))
+	b.WriteString(dashHeading.Render("  RELIABILITY DISTRIBUTION"))
 	b.WriteString("\n\n")
 
 	bar := func(count int, color lipgloss.Color, label string) string {
@@ -115,7 +115,7 @@ func (m DashboardModel) View() string {
 	b.WriteString("\n\n")
 
 	// Top 5 and bottom 3.
-	b.WriteString(dashHeading.Render("  TOP 5 TOOLS"))
+	b.WriteString(dashHeading.Render("  TOP 5 SUBSYSTEMS"))
 	b.WriteString("\n\n")
 	for i, p := range m.policies {
 		if i >= 5 {
@@ -130,7 +130,7 @@ func (m DashboardModel) View() string {
 
 	if len(m.policies) > 3 {
 		b.WriteString("\n")
-		b.WriteString(dashHeading.Render("  BOTTOM 3 TOOLS"))
+		b.WriteString(dashHeading.Render("  LOWEST RELIABILITY"))
 		b.WriteString("\n\n")
 		start := len(m.policies) - 3
 		for i := start; i < len(m.policies); i++ {

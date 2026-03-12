@@ -100,13 +100,13 @@ func (m SamplingModel) View() string {
 	var b strings.Builder
 
 	heading := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("147"))
-	b.WriteString(heading.Render("  THOMPSON SAMPLING — LIVE DRAWS"))
+	b.WriteString(heading.Render("  DECISION ENGINE — THOMPSON SAMPLING LIVE"))
 	b.WriteString("\n\n")
 	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("246")).Render(
-		"  Each round draws from Beta(alpha, beta). Watch rankings shift in real-time."))
+		"  Each round draws from Beta(alpha, beta). Watch system rankings shift."))
 	b.WriteString("\n")
 	b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("246")).Render(
-		"  This is exploration vs exploitation — the core of Bayesian tool ranking."))
+		"  Exploration vs exploitation — how the fleet learns which tools to trust."))
 	b.WriteString("\n\n")
 
 	winner := lipgloss.NewStyle().Foreground(lipgloss.Color("120")).Bold(true)
