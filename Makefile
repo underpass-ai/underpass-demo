@@ -1,6 +1,6 @@
 BINARY := tlctl
 
-.PHONY: build run clean costbench
+.PHONY: build run clean costbench record
 
 build:
 	go build -o bin/$(BINARY) ./cmd/tlctl
@@ -13,3 +13,6 @@ clean:
 
 costbench:
 	@go test -v ./internal/benchmark/
+
+record: build
+	vhs demo.tape
