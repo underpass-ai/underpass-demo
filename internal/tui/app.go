@@ -18,6 +18,7 @@ const (
 	ViewBridge
 	ViewSystems
 	ViewSampling
+	ViewAgents
 	ViewLog
 )
 
@@ -31,6 +32,8 @@ func viewName(v View) string {
 		return "Systems"
 	case ViewSampling:
 		return "Thompson Sampling"
+	case ViewAgents:
+		return "Agent Dispatch"
 	case ViewLog:
 		return "Ship's Log"
 	default:
@@ -55,6 +58,7 @@ type Model struct {
 	bridge   views.DashboardModel
 	systems  views.RankingsModel
 	sampling views.SamplingModel
+	agents   views.AgentsModel
 	log      views.EventsModel
 
 	initialised map[View]bool
@@ -69,6 +73,7 @@ func NewModel(deps Deps) Model {
 		bridge:      views.NewDashboardModel(deps.PolicyReader),
 		systems:     views.NewRankingsModel(deps.PolicyReader),
 		sampling:    views.NewSamplingModel(deps.PolicyReader),
+		agents:      views.NewAgentsModel(),
 		log:         views.NewEventsModel(deps.EventSub),
 		initialised: map[View]bool{ViewMission: true},
 	}
@@ -92,6 +97,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.switchView(ViewSystems)
 		case "t":
 			return m.switchView(ViewSampling)
+		case "a":
+			return m.switchView(ViewAgents)
 		case "l":
 			return m.switchView(ViewLog)
 		}
@@ -111,6 +118,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.systems, cmd = m.systems.Update(msg)
 	case ViewSampling:
 		m.sampling, cmd = m.sampling.Update(msg)
+	case ViewAgents:
+		m.agents, cmd = m.agents.Update(msg)
 	case ViewLog:
 		m.log, cmd = m.log.Update(msg)
 	}
@@ -136,6 +145,8 @@ func (m Model) View() string {
 		b.WriteString(m.systems.View())
 	case ViewSampling:
 		b.WriteString(m.sampling.View())
+	case ViewAgents:
+		b.WriteString(m.agents.View())
 	case ViewLog:
 		b.WriteString(m.log.View())
 	}
@@ -162,6 +173,8 @@ func (m Model) switchView(target View) (tea.Model, tea.Cmd) {
 		cmd = m.systems.Init()
 	case ViewSampling:
 		cmd = m.sampling.Init()
+	case ViewAgents:
+		cmd = m.agents.Init()
 	case ViewLog:
 		cmd = m.log.Init()
 	}
@@ -174,6 +187,7 @@ func (m Model) renderHelp() string {
 		{"b", "bridge"},
 		{"s", "systems"},
 		{"t", "thompson"},
+		{"a", "agents"},
 		{"l", "log"},
 		{"q", "quit"},
 	}
