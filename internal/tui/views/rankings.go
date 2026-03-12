@@ -32,8 +32,7 @@ func (m RankingsModel) Init() tea.Cmd {
 }
 
 func (m RankingsModel) Update(msg tea.Msg) (RankingsModel, tea.Cmd) {
-	switch msg := msg.(type) {
-	case policiesLoadedMsg:
+	if msg, ok := msg.(policiesLoadedMsg); ok {
 		m.loading = false
 		m.err = msg.err
 		m.policies = msg.policies

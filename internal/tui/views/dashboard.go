@@ -46,8 +46,7 @@ func (m DashboardModel) Init() tea.Cmd {
 }
 
 func (m DashboardModel) Update(msg tea.Msg) (DashboardModel, tea.Cmd) {
-	switch msg := msg.(type) {
-	case policiesLoadedMsg:
+	if msg, ok := msg.(policiesLoadedMsg); ok {
 		m.loading = false
 		m.err = msg.err
 		m.policies = msg.policies

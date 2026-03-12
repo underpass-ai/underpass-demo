@@ -29,11 +29,11 @@ type scoredTool struct {
 
 // SamplingModel shows live Thompson Sampling draws.
 type SamplingModel struct {
-	reader   ports.PolicyReader
-	policies []domain.ToolPolicy
-	rounds   []samplingRound
-	loading  bool
-	err      error
+	reader    ports.PolicyReader
+	policies  []domain.ToolPolicy
+	rounds    []samplingRound
+	loading   bool
+	err       error
 	maxRounds int
 }
 

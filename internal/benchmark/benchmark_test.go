@@ -119,7 +119,7 @@ func TestContextPrecision(t *testing.T) {
 		surgTokens int
 		ratio      float64
 	}
-	var results []result
+	results := make([]result, 0, len(scenarios))
 
 	for _, s := range scenarios {
 		tradTokens := TotalTokens(s.Traditional)

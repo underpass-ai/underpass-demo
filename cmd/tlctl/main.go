@@ -47,7 +47,7 @@ func run(embeddedMode bool, valkeyAddr, valkeyPass string, valkeyDB int, valkeyP
 		if err != nil {
 			return fmt.Errorf("valkey: %w", err)
 		}
-		defer reader.Close()
+		defer func() { _ = reader.Close() }()
 		deps.PolicyReader = reader
 
 		// Optionally connect to NATS.

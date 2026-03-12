@@ -30,7 +30,6 @@ type EventsModel struct {
 	eventCh    <-chan domain.PolicyUpdateEvent
 	cancel     context.CancelFunc
 	watching   bool
-	err        error
 }
 
 func NewEventsModel(sub ports.EventSubscriber) EventsModel {

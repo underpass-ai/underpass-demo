@@ -41,8 +41,7 @@ func (m AgentsModel) Init() tea.Cmd {
 }
 
 func (m AgentsModel) Update(msg tea.Msg) (AgentsModel, tea.Cmd) {
-	switch msg.(type) {
-	case agentTickMsg:
+	if _, ok := msg.(agentTickMsg); ok {
 		if m.step == 0 {
 			m.dispatches = initialDispatches()
 			m.step = 1
@@ -123,7 +122,8 @@ func (m AgentsModel) View() string {
 		"Event", "Agent", "Model", "Tokens", "Status")))
 	b.WriteString("\n" + sep + "\n")
 
-	for _, d := range m.dispatches {
+	for i := range m.dispatches {
+		d := &m.dispatches[i]
 		eventStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
 		agentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("120")).Bold(true)
 		modelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("183"))
@@ -157,7 +157,8 @@ func (m AgentsModel) View() string {
 	b.WriteString(heading.Render("  TOOL ASSIGNMENTS (Thompson Sampling filtered)"))
 	b.WriteString("\n\n")
 
-	for _, d := range m.dispatches {
+	for i := range m.dispatches {
+		d := &m.dispatches[i]
 		if d.Status == "PENDING" {
 			continue
 		}

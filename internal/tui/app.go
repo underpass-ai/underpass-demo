@@ -61,7 +61,7 @@ type Model struct {
 	agents   views.AgentsModel
 	log      views.EventsModel
 
-	initialised map[View]bool
+	initialized map[View]bool
 }
 
 // NewModel creates the root model with all dependencies injected.
@@ -75,7 +75,7 @@ func NewModel(deps Deps) Model {
 		sampling:    views.NewSamplingModel(deps.PolicyReader),
 		agents:      views.NewAgentsModel(),
 		log:         views.NewEventsModel(deps.EventSub),
-		initialised: map[View]bool{ViewMission: true},
+		initialized: map[View]bool{ViewMission: true},
 	}
 }
 
@@ -162,7 +162,7 @@ func (m Model) switchView(target View) (tea.Model, tea.Cmd) {
 	m.currentView = target
 
 	// Always re-init to refresh data.
-	m.initialised[target] = true
+	m.initialized[target] = true
 	var cmd tea.Cmd
 	switch target {
 	case ViewMission:
@@ -192,7 +192,7 @@ func (m Model) renderHelp() string {
 		{"q", "quit"},
 	}
 
-	var parts []string
+	parts := make([]string, 0, len(bindings))
 	for _, bind := range bindings {
 		k := StyleHelpKey.Render(bind.key)
 		d := StyleHelpDesc.Render(bind.desc)
