@@ -95,6 +95,7 @@ var (
 	logCrit     = lipgloss.NewStyle().Foreground(lipgloss.Color("210")).Bold(true)
 	logEvent    = lipgloss.NewStyle().Foreground(lipgloss.Color("117")).Bold(true)
 	logAgent    = lipgloss.NewStyle().Foreground(lipgloss.Color("183"))
+	logKernel   = lipgloss.NewStyle().Foreground(lipgloss.Color("115")).Bold(true)
 	logNatsEvt  = lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
 	logNatsOk   = lipgloss.NewStyle().Foreground(lipgloss.Color("120")).Bold(true)
 	logNatsFilt = lipgloss.NewStyle().Foreground(lipgloss.Color("210"))
@@ -110,6 +111,8 @@ func levelStyle(level string) lipgloss.Style {
 		return logEvent
 	case "AGENT":
 		return logAgent
+	case "KERNEL":
+		return logKernel
 	default:
 		return logInfo
 	}

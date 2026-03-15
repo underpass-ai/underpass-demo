@@ -16,7 +16,7 @@ import (
 // LogEntry represents a single line in the Ship's Log.
 type LogEntry struct {
 	Time    string
-	Level   string // INFO, WARN, CRITICAL, EVENT, AGENT
+	Level   string // INFO, WARN, CRITICAL, EVENT, AGENT, KERNEL
 	Message string
 }
 
@@ -26,19 +26,36 @@ type SharedLog struct {
 	Entries []LogEntry
 }
 
+// ── Bubble Tea messages ─────────────────────────────────────────────────────
+// policiesLoadedMsg is declared in dashboard.go (shared across views).
+
+type kernelContextMsg struct {
+	bundle *domain.ContextResult
+	graph  *domain.GraphResult
+	err    error
+}
+
 // MissionModel drives the spaceship scenario — the main demo experience.
 // Press SPACE to advance through 10 phases of the USS Underpass mission.
 type MissionModel struct {
 	reader   ports.PolicyReader
+	context  ports.ContextProvider
+	recorder ports.SessionRecorder
 	policies []domain.ToolPolicy
 	phase    int
 	loading  bool
 	err      error
 	Log      *SharedLog
+
+	// Kernel state for phases 7-8.
+	kernelBundle  *domain.ContextResult
+	kernelGraph   *domain.GraphResult
+	kernelLoading bool
+	kernelErr     error
 }
 
-func NewMissionModel(reader ports.PolicyReader, log *SharedLog) MissionModel {
-	return MissionModel{reader: reader, loading: true, Log: log}
+func NewMissionModel(reader ports.PolicyReader, ctx ports.ContextProvider, rec ports.SessionRecorder, log *SharedLog) MissionModel {
+	return MissionModel{reader: reader, context: ctx, recorder: rec, loading: true, Log: log}
 }
 
 func (m MissionModel) Init() tea.Cmd {
@@ -59,15 +76,101 @@ func (m MissionModel) Update(msg tea.Msg) (MissionModel, tea.Cmd) {
 			return m.policies[i].Confidence > m.policies[j].Confidence
 		})
 		m.emitLogs(0)
+		m.recordPhase(0)
+
+	case kernelContextMsg:
+		m.kernelLoading = false
+		m.kernelErr = msg.err
+		if msg.err == nil {
+			m.kernelBundle = msg.bundle
+			m.kernelGraph = msg.graph
+			ts := time.Now().Format("15:04:05")
+			nodes := 0
+			rels := 0
+			tokens := uint32(0)
+			snap := ""
+			if msg.bundle != nil {
+				nodes = len(msg.bundle.Nodes)
+				rels = len(msg.bundle.Relationships)
+				tokens = msg.bundle.TokenCount
+				snap = msg.bundle.SnapshotID
+			}
+			m.Log.Entries = append(m.Log.Entries, LogEntry{
+				Time: ts, Level: "KERNEL",
+				Message: fmt.Sprintf("GetContext: %d nodes, %d rels, %d tokens, %s", nodes, rels, tokens, snap),
+			})
+			m.recordKernel(msg.bundle)
+		} else {
+			ts := time.Now().Format("15:04:05")
+			m.Log.Entries = append(m.Log.Entries, LogEntry{
+				Time: ts, Level: "KERNEL",
+				Message: fmt.Sprintf("GetContext failed: %v [SIMULATED fallback]", msg.err),
+			})
+		}
+
 	case tea.KeyMsg:
 		if msg.String() == "enter" || msg.String() == " " {
 			if m.phase < 9 {
 				m.phase++
 				m.emitLogs(m.phase)
+				m.recordPhase(m.phase)
+
+				// Phase 7 → fire async kernel call.
+				if m.phase == 7 && m.context != nil {
+					m.kernelLoading = true
+					return m, m.fetchKernelContext()
+				}
 			}
 		}
 	}
 	return m, nil
+}
+
+// fetchKernelContext fires an async tea.Cmd to call the kernel.
+func (m MissionModel) fetchKernelContext() tea.Cmd {
+	cp := m.context
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		req := domain.ContextRequest{
+			RootNodeID:  "node:mission:engine-core-failure",
+			Role:        "implementer",
+			Phase:       "rehydration",
+			TokenBudget: 4000,
+			Scopes:      []string{"engine", "hull", "power"},
+		}
+		bundle, bundleErr := cp.GetContext(ctx, req)
+		if bundleErr != nil {
+			return kernelContextMsg{err: bundleErr}
+		}
+		graph, graphErr := cp.GetGraphRelationships(ctx, req.RootNodeID, "mission", 3)
+		return kernelContextMsg{bundle: bundle, graph: graph, err: graphErr}
+	}
+}
+
+func (m *MissionModel) recordPhase(phase int) {
+	if m.recorder == nil {
+		return
+	}
+	_ = m.recorder.Record(domain.SessionRecord{
+		Kind:  "phase",
+		Ts:    time.Now(),
+		Phase: phase,
+		Data:  phaseLogs[phase],
+	})
+}
+
+func (m *MissionModel) recordKernel(bundle *domain.ContextResult) {
+	if m.recorder == nil || bundle == nil {
+		return
+	}
+	_ = m.recorder.Record(domain.SessionRecord{
+		Kind:  "kernel",
+		Ts:    time.Now(),
+		Phase: m.phase,
+		Data:  bundle,
+	})
 }
 
 // sysOverride replaces live metrics for a tool during a scenario phase.
@@ -159,6 +262,7 @@ var (
 	mPend   = lipgloss.NewStyle().Foreground(lipgloss.Color("246"))
 	mBndl   = lipgloss.NewStyle().Foreground(lipgloss.Color("147"))
 	mEvt    = lipgloss.NewStyle().Foreground(lipgloss.Color("222")).Bold(true)
+	mSim    = lipgloss.NewStyle().Foreground(lipgloss.Color("246")).Italic(true)
 )
 
 func (m MissionModel) View() string {
@@ -346,57 +450,33 @@ func (m MissionModel) phaseRehydration(b *strings.Builder) {
 		"Rehydration bundle loaded from Neo4j graph.",
 	)
 
-	// Task graph
-	graphTitle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("183"))
-	b.WriteString("\n")
-	b.WriteString(graphTitle.Render("  --- TASK GRAPH --- USS Underpass: Engine Core Failure ---"))
-	b.WriteString("\n\n")
-	b.WriteString(mDone.Render("   * [1] Diagnose anomaly ................................. DONE"))
-	b.WriteString("\n")
-	b.WriteString(mGrBdr.Render("    |"))
-	b.WriteString("\n")
-	b.WriteString(mDone.Render("   * [2] Assess cascade damage ............................ DONE"))
-	b.WriteString("\n")
-	b.WriteString(mGrBdr.Render("    |"))
-	b.WriteString("\n")
-	b.WriteString(mGrBdr.Render("    |-- ") + mFail.Render("x Path A: Direct engine repair ............... ABANDONED"))
-	b.WriteString("\n")
-	b.WriteString(mGrBdr.Render("    |   ") + mFail.Render("  3 attempts. Hull stress +12%. Counterproductive."))
-	b.WriteString("\n")
-	b.WriteString(mGrBdr.Render("    |   ") + mFail.Render("  Model: qwen3-8b. Escalated to claude-opus."))
-	b.WriteString("\n")
-	b.WriteString(mGrBdr.Render("    |"))
-	b.WriteString("\n")
-	b.WriteString(mGrBdr.Render("    '-- ") + mActv.Render("o Path B: Hull-first protocol ................ NEW BRANCH"))
-	b.WriteString("\n")
-	b.WriteString(mGrBdr.Render("         |-- ") + mActv.Render("[3] Seal hull breaches ..................... IN PROGRESS"))
-	b.WriteString("\n")
-	b.WriteString(mGrBdr.Render("         |-- ") + mPend.Render("[4] Stabilize power grid ................... PENDING"))
-	b.WriteString("\n")
-	b.WriteString(mGrBdr.Render("         '-- ") + mPend.Render("[5] Repair engine (safe conditions) ........ PENDING"))
-	b.WriteString("\n\n")
+	if m.kernelLoading {
+		b.WriteString("\n  " + mActv.Render("Fetching context from kernel...") + "\n")
+		writeHint(b, "Waiting for kernel response...")
+		return
+	}
 
-	// Rehydration bundle
-	b.WriteString(graphTitle.Render("  --- REHYDRATION BUNDLE ---"))
-	b.WriteString("\n\n")
-	b.WriteString(mBndl.Render("   Root:       ") + "node:mission:engine-core-failure\n")
-	b.WriteString(mBndl.Render("   Role:       ") + "implementer\n")
-	b.WriteString(mBndl.Render("   Checkpoint: ") + "ALPHA-3 (damage assessment)\n")
-	b.WriteString(mBndl.Render("   Nodes:      ") + "7    Relationships: 6\n")
-	b.WriteString(mBndl.Render("   Details:    ") + "3 node details loaded\n")
-	b.WriteString(mBndl.Render("   Tokens:     ") + "394 / 4,000 budget\n")
-	b.WriteString(mBndl.Render("   Snapshot:   ") + "snap_uss_20260312T154230Z\n")
-	b.WriteString("\n")
+	// Use kernel data if available, otherwise hardcoded (simulated).
+	bundle := m.kernelBundle
+	simulated := bundle == nil
 
-	tokenNote := lipgloss.NewStyle().Foreground(lipgloss.Color("120")).Bold(true)
-	b.WriteString(tokenNote.Render("   394 tokens. Not 6,190. Not 128,000. Three hundred ninety-four."))
-	b.WriteString("\n")
+	if simulated {
+		b.WriteString("  " + mSim.Render("[SIMULATED]") + "\n")
+	}
+
+	m.renderTaskGraph(b, bundle, simulated)
+	m.renderBundleMetadata(b, bundle, simulated)
 
 	writeHint(b, "Press SPACE — hull-first protocol in action...")
 }
 
 func (m MissionModel) phaseNewBranch(b *strings.Builder) {
 	writeBanner(b, "117", "RECOVERING", "HULL-FIRST PROTOCOL — NEW BRANCH ACTIVE")
+
+	simulated := m.kernelBundle == nil
+	if simulated {
+		b.WriteString("  " + mSim.Render("[SIMULATED]") + "\n")
+	}
 
 	writeNarr(b,
 		"New strategy working! Hull sealed first, then power stabilized.",
@@ -440,6 +520,216 @@ func (m MissionModel) phaseResolution(b *strings.Builder) {
 	complete := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("120"))
 	b.WriteString("\n")
 	b.WriteString(complete.Render("  MISSION COMPLETE. The USS Underpass sails on."))
+	b.WriteString("\n")
+}
+
+// ─── Kernel data renderers ──────────────────────────────────────────────────
+
+func (m MissionModel) renderTaskGraph(b *strings.Builder, bundle *domain.ContextResult, simulated bool) {
+	graphTitle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("183"))
+	b.WriteString("\n")
+	b.WriteString(graphTitle.Render("  --- TASK GRAPH --- USS Underpass: Engine Core Failure ---"))
+	b.WriteString("\n\n")
+
+	if !simulated && bundle != nil {
+		m.renderKernelGraph(b, bundle)
+	} else {
+		m.renderHardcodedGraph(b)
+	}
+}
+
+func (m MissionModel) renderKernelGraph(b *strings.Builder, bundle *domain.ContextResult) {
+	statusStyle := func(status string) lipgloss.Style {
+		switch status {
+		case "done":
+			return mDone
+		case "abandoned":
+			return mFail
+		case "active":
+			return mActv
+		default:
+			return mPend
+		}
+	}
+
+	statusLabel := func(status string) string {
+		switch status {
+		case "done":
+			return "DONE"
+		case "abandoned":
+			return "ABANDONED"
+		case "active":
+			return "IN PROGRESS"
+		default:
+			return "PENDING"
+		}
+	}
+
+	statusIcon := func(status string) string {
+		switch status {
+		case "done":
+			return "*"
+		case "abandoned":
+			return "x"
+		case "active":
+			return "o"
+		default:
+			return "-"
+		}
+	}
+
+	// Build adjacency: sourceID → []targetNode
+	type edge struct {
+		rel  domain.GraphRelationship
+		node domain.GraphNode
+	}
+	nodeMap := make(map[string]domain.GraphNode)
+	for _, n := range bundle.Nodes {
+		nodeMap[n.ID] = n
+	}
+	children := make(map[string][]edge)
+	for _, r := range bundle.Relationships {
+		if target, ok := nodeMap[r.TargetID]; ok {
+			children[r.SourceID] = append(children[r.SourceID], edge{rel: r, node: target})
+		}
+	}
+
+	// Walk the tree from root.
+	var walk func(nodeID, prefix string, last bool)
+	seq := 0
+	walk = func(nodeID, prefix string, last bool) {
+		n, ok := nodeMap[nodeID]
+		if !ok {
+			return
+		}
+		seq++
+		st := statusStyle(n.Status)
+		icon := statusIcon(n.Status)
+		label := statusLabel(n.Status)
+
+		connector := "|-- "
+		if last {
+			connector = "'-- "
+		}
+		if prefix == "" {
+			// Root node.
+			b.WriteString(st.Render(fmt.Sprintf("   %s [%d] %s %s %s",
+				icon, seq, n.Label, strings.Repeat(".", max(1, 50-len(n.Label))), label)))
+			b.WriteString("\n")
+		} else {
+			b.WriteString(mGrBdr.Render(prefix+connector) + st.Render(fmt.Sprintf("%s [%d] %s %s %s",
+				icon, seq, n.Label, strings.Repeat(".", max(1, 45-len(n.Label)-len(prefix))), label)))
+			b.WriteString("\n")
+		}
+
+		edges := children[nodeID]
+		for i := range edges {
+			var childPrefix string
+			switch {
+			case prefix == "":
+				childPrefix = "    "
+			case last:
+				childPrefix = prefix + "     "
+			default:
+				childPrefix = prefix + "|    "
+			}
+
+			// Show relationship label if present (e.g. "Path A", "Path B").
+			if edges[i].rel.Label != "" {
+				b.WriteString(mGrBdr.Render(childPrefix))
+				b.WriteString("\n")
+			}
+
+			walk(edges[i].node.ID, childPrefix, i == len(edges)-1)
+		}
+	}
+
+	// Find root (the mission node).
+	rootID := bundle.RootNodeID
+	if rootID == "" && len(bundle.Nodes) > 0 {
+		rootID = bundle.Nodes[0].ID
+	}
+	walk(rootID, "", true)
+
+	// Show node details if present.
+	if len(bundle.Details) > 0 {
+		for _, d := range bundle.Details {
+			if n, ok := nodeMap[d.NodeID]; ok && n.Status == "abandoned" {
+				b.WriteString(mGrBdr.Render("         ") + mFail.Render("  "+d.Description))
+				b.WriteString("\n")
+				if model, ok := d.Properties["model"]; ok {
+					extra := "Model: " + model
+					if esc, ok := d.Properties["escalated_to"]; ok {
+						extra += ". Escalated to " + esc + "."
+					}
+					b.WriteString(mGrBdr.Render("         ") + mFail.Render("  "+extra))
+					b.WriteString("\n")
+				}
+			}
+		}
+	}
+
+	b.WriteString("\n")
+}
+
+func (m MissionModel) renderHardcodedGraph(b *strings.Builder) {
+	b.WriteString(mDone.Render("   * [1] Diagnose anomaly ................................. DONE"))
+	b.WriteString("\n")
+	b.WriteString(mGrBdr.Render("    |"))
+	b.WriteString("\n")
+	b.WriteString(mDone.Render("   * [2] Assess cascade damage ............................ DONE"))
+	b.WriteString("\n")
+	b.WriteString(mGrBdr.Render("    |"))
+	b.WriteString("\n")
+	b.WriteString(mGrBdr.Render("    |-- ") + mFail.Render("x Path A: Direct engine repair ............... ABANDONED"))
+	b.WriteString("\n")
+	b.WriteString(mGrBdr.Render("    |   ") + mFail.Render("  3 attempts. Hull stress +12%. Counterproductive."))
+	b.WriteString("\n")
+	b.WriteString(mGrBdr.Render("    |   ") + mFail.Render("  Model: qwen3-8b. Escalated to claude-opus."))
+	b.WriteString("\n")
+	b.WriteString(mGrBdr.Render("    |"))
+	b.WriteString("\n")
+	b.WriteString(mGrBdr.Render("    '-- ") + mActv.Render("o Path B: Hull-first protocol ................ NEW BRANCH"))
+	b.WriteString("\n")
+	b.WriteString(mGrBdr.Render("         |-- ") + mActv.Render("[3] Seal hull breaches ..................... IN PROGRESS"))
+	b.WriteString("\n")
+	b.WriteString(mGrBdr.Render("         |-- ") + mPend.Render("[4] Stabilize power grid ................... PENDING"))
+	b.WriteString("\n")
+	b.WriteString(mGrBdr.Render("         '-- ") + mPend.Render("[5] Repair engine (safe conditions) ........ PENDING"))
+	b.WriteString("\n\n")
+}
+
+func (m MissionModel) renderBundleMetadata(b *strings.Builder, bundle *domain.ContextResult, simulated bool) {
+	graphTitle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("183"))
+	b.WriteString(graphTitle.Render("  --- REHYDRATION BUNDLE ---"))
+	b.WriteString("\n\n")
+
+	if !simulated && bundle != nil {
+		b.WriteString(mBndl.Render("   Root:       ") + bundle.RootNodeID + "\n")
+		b.WriteString(mBndl.Render("   Nodes:      ") + fmt.Sprintf("%d    Relationships: %d", len(bundle.Nodes), len(bundle.Relationships)) + "\n")
+		b.WriteString(mBndl.Render("   Details:    ") + fmt.Sprintf("%d node details loaded", len(bundle.Details)) + "\n")
+		b.WriteString(mBndl.Render("   Tokens:     ") + fmt.Sprintf("%d / 4,000 budget", bundle.TokenCount) + "\n")
+		b.WriteString(mBndl.Render("   Hash:       ") + bundle.ContentHash + "\n")
+		b.WriteString(mBndl.Render("   Snapshot:   ") + bundle.SnapshotID + "\n")
+	} else {
+		b.WriteString(mBndl.Render("   Root:       ") + "node:mission:engine-core-failure\n")
+		b.WriteString(mBndl.Render("   Role:       ") + "implementer\n")
+		b.WriteString(mBndl.Render("   Checkpoint: ") + "ALPHA-3 (damage assessment)\n")
+		b.WriteString(mBndl.Render("   Nodes:      ") + "7    Relationships: 6\n")
+		b.WriteString(mBndl.Render("   Details:    ") + "3 node details loaded\n")
+		b.WriteString(mBndl.Render("   Tokens:     ") + "394 / 4,000 budget\n")
+		b.WriteString(mBndl.Render("   Snapshot:   ") + "snap_uss_20260312T154230Z\n")
+	}
+	b.WriteString("\n")
+
+	tokenCount := uint32(394)
+	if bundle != nil {
+		tokenCount = bundle.TokenCount
+	}
+
+	tokenNote := lipgloss.NewStyle().Foreground(lipgloss.Color("120")).Bold(true)
+	b.WriteString(tokenNote.Render(fmt.Sprintf("   %d tokens. Not 6,190. Not 128,000. %s.",
+		tokenCount, numberToWords(tokenCount))))
 	b.WriteString("\n")
 }
 
@@ -523,4 +813,11 @@ func (m MissionModel) renderSystems(overrides map[string]sysOverride, maxErrRate
 	}
 	b.WriteString(sep)
 	return b.String()
+}
+
+func numberToWords(n uint32) string {
+	if n == 394 {
+		return "Three hundred ninety-four"
+	}
+	return fmt.Sprintf("%d", n)
 }

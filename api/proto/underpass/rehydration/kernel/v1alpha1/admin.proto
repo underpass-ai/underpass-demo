@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package underpass.rehydration.kernel.v1alpha1;
+
+option go_package = "github.com/underpass-ai/underpass-demo/internal/gen/kernelv1alpha1";
+
+import "underpass/rehydration/kernel/v1alpha1/common.proto";
+
+// AdminService provides write operations for the knowledge graph.
+service AdminService {
+  // CreateSnapshot persists the current graph state.
+  rpc CreateSnapshot(CreateSnapshotRequest) returns (CreateSnapshotResponse);
+
+  // GetSnapshot retrieves a previously created snapshot.
+  rpc GetSnapshot(GetSnapshotRequest) returns (GetSnapshotResponse);
+}
+
+message CreateSnapshotRequest {
+  string root_node_id = 1;
+  string label = 2;
+}
+
+message CreateSnapshotResponse {
+  string snapshot_id = 1;
+  string content_hash = 2;
+  uint32 node_count = 3;
+  uint32 relationship_count = 4;
+}
+
+message GetSnapshotRequest {
+  string snapshot_id = 1;
+}
+
+message GetSnapshotResponse {
+  string snapshot_id = 1;
+  string label = 2;
+  string content_hash = 3;
+  repeated GraphNode nodes = 4;
+  repeated GraphRelationship relationships = 5;
+}

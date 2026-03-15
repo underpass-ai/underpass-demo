@@ -24,6 +24,22 @@ type EventSubscriber interface {
 	Close()
 }
 
+// ContextProvider provides rehydration context from the kernel (or a simulator).
+type ContextProvider interface {
+	// GetContext builds a scoped rehydration bundle for the given root node.
+	GetContext(ctx context.Context, req domain.ContextRequest) (*domain.ContextResult, error)
+	// GetGraphRelationships returns a subgraph around a given node.
+	GetGraphRelationships(ctx context.Context, nodeID, nodeKind string, depth uint32) (*domain.GraphResult, error)
+}
+
+// SessionRecorder writes session entries to a persistent log.
+type SessionRecorder interface {
+	// Record appends a single entry to the session log.
+	Record(entry domain.SessionRecord) error
+	// Close flushes and closes the underlying writer.
+	Close() error
+}
+
 // CredentialStore persists mTLS credentials.
 type CredentialStore interface {
 	Save(certPEM, keyPEM, caPEM []byte, serverName string) error
