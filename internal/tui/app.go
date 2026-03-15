@@ -66,15 +66,18 @@ type Model struct {
 
 // NewModel creates the root model with all dependencies injected.
 func NewModel(deps Deps) Model {
+	sharedLog := &views.SharedLog{}
+	logView := views.NewEventsModel(deps.EventSub)
+	logView.MissionLog = sharedLog
 	return Model{
 		currentView: ViewMission,
 		deps:        deps,
-		mission:     views.NewMissionModel(deps.PolicyReader),
+		mission:     views.NewMissionModel(deps.PolicyReader, sharedLog),
 		bridge:      views.NewDashboardModel(deps.PolicyReader),
 		systems:     views.NewRankingsModel(deps.PolicyReader),
 		sampling:    views.NewSamplingModel(deps.PolicyReader),
 		agents:      views.NewAgentsModel(),
-		log:         views.NewEventsModel(deps.EventSub),
+		log:         logView,
 		initialized: map[View]bool{ViewMission: true},
 	}
 }
@@ -161,12 +164,19 @@ func (m Model) View() string {
 func (m Model) switchView(target View) (tea.Model, tea.Cmd) {
 	m.currentView = target
 
-	// Always re-init to refresh data.
+	// Mission keeps its phase state — don't re-init once started.
+	// Other views re-init to refresh data (policies, sampling rounds, etc.).
+	if target == ViewMission {
+		if !m.initialized[target] {
+			m.initialized[target] = true
+			return m, m.mission.Init()
+		}
+		return m, nil
+	}
+
 	m.initialized[target] = true
 	var cmd tea.Cmd
 	switch target {
-	case ViewMission:
-		cmd = m.mission.Init()
 	case ViewBridge:
 		cmd = m.bridge.Init()
 	case ViewSystems:

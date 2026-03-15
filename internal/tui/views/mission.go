@@ -5,12 +5,26 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/underpass-ai/underpass-demo/internal/app/ports"
 	"github.com/underpass-ai/underpass-demo/internal/domain"
 )
+
+// LogEntry represents a single line in the Ship's Log.
+type LogEntry struct {
+	Time    string
+	Level   string // INFO, WARN, CRITICAL, EVENT, AGENT
+	Message string
+}
+
+// SharedLog is a shared log buffer between Mission and Ship's Log views.
+// Bubble Tea copies models on Update, so we need a shared pointer.
+type SharedLog struct {
+	Entries []LogEntry
+}
 
 // MissionModel drives the spaceship scenario — the main demo experience.
 // Press SPACE to advance through 10 phases of the USS Underpass mission.
@@ -20,10 +34,11 @@ type MissionModel struct {
 	phase    int
 	loading  bool
 	err      error
+	Log      *SharedLog
 }
 
-func NewMissionModel(reader ports.PolicyReader) MissionModel {
-	return MissionModel{reader: reader, loading: true}
+func NewMissionModel(reader ports.PolicyReader, log *SharedLog) MissionModel {
+	return MissionModel{reader: reader, loading: true, Log: log}
 }
 
 func (m MissionModel) Init() tea.Cmd {
@@ -43,10 +58,12 @@ func (m MissionModel) Update(msg tea.Msg) (MissionModel, tea.Cmd) {
 		sort.Slice(m.policies, func(i, j int) bool {
 			return m.policies[i].Confidence > m.policies[j].Confidence
 		})
+		m.emitLogs(0)
 	case tea.KeyMsg:
 		if msg.String() == "enter" || msg.String() == " " {
 			if m.phase < 9 {
 				m.phase++
+				m.emitLogs(m.phase)
 			}
 		}
 	}
@@ -57,6 +74,75 @@ func (m MissionModel) Update(msg tea.Msg) (MissionModel, tea.Cmd) {
 type sysOverride struct {
 	errRate float64
 	p95ms   int64
+}
+
+// phaseLog describes what happened in a phase — used for both rendering and Ship's Log.
+type phaseLog struct {
+	event   string // NATS subject (empty = no event)
+	agent   string // agent dispatched
+	model   string // qwen3-8b or claude-opus
+	tokens  int
+	entries []LogEntry // level + message pairs
+}
+
+var phaseLogs = [10]phaseLog{
+	0: {entries: []LogEntry{
+		{"", "INFO", "Ship systems initialized. All subsystems nominal."},
+		{"", "INFO", "AI agent fleet: 4 agents active, routine patrol."},
+	}},
+	1: {event: "sensor.anomaly.detected", agent: "diagnostic-agent", model: "qwen3-8b", tokens: 96, entries: []LogEntry{
+		{"", "WARN", "eng.thrust latency 890ms → 1200ms, error rate climbing"},
+	}},
+	2: {event: "engine.failure.critical", agent: "repair-agent", model: "qwen3-8b", tokens: 394, entries: []LogEntry{
+		{"", "CRITICAL", "COOLANT RUPTURE — eng.thrust error rate 42%, latency 2800ms"},
+	}},
+	3: {event: "hull.integrity.warning", agent: "structural-agent", model: "qwen3-8b", tokens: 280, entries: []LogEntry{
+		{"", "CRITICAL", "CASCADE: power.reroute 28%, shield.mod 22% — 3 systems compromised"},
+	}},
+	4: {event: "policy.updated", agent: "ranking-agent", model: "qwen3-8b", tokens: 150, entries: []LogEntry{
+		{"", "INFO", "Thompson Sampling: hard constraint max_error_rate=20% engaged"},
+		{"", "INFO", "FILTERED: eng.thrust (42%), power.reroute (28%), shield.mod (22%)"},
+	}},
+	5: {agent: "repair-agent", model: "qwen3-8b", entries: []LogEntry{
+		{"", "WARN", "Engine repair attempt #3 failed. Hull stress at 76%"},
+		{"", "WARN", "Strategy counterproductive — repairs causing micro-fractures"},
+	}},
+	6: {event: "repair.strategy.failing", agent: "strategy-agent", model: "claude-opus", tokens: 504, entries: []LogEntry{
+		{"", "INFO", "MODEL ROUTING: escalating to Claude Opus ($0.006, 394 tokens)"},
+		{"", "AGENT", "Task graph analysis: 3 failed attempts. Hull-first recommended."},
+	}},
+	7: {event: "context.rehydrated", agent: "recovery-agent", model: "qwen3-8b", tokens: 394, entries: []LogEntry{
+		{"", "INFO", "REHYDRATION: checkpoint ALPHA-3 loaded, new branch created"},
+		{"", "INFO", "Rehydration bundle: 394 / 4,000 token budget"},
+	}},
+	8: {agent: "recovery-agent", model: "qwen3-8b", entries: []LogEntry{
+		{"", "INFO", "Hull sealed — error rate 6%, structural integrity 98%"},
+		{"", "INFO", "Power grid stabilizing — error rate 12%"},
+	}},
+	9: {entries: []LogEntry{
+		{"", "INFO", "Engine core repaired. All systems nominal."},
+		{"", "INFO", "MISSION COMPLETE — no human intervention required"},
+	}},
+}
+
+func (m *MissionModel) emitLogs(phase int) {
+	pl := phaseLogs[phase]
+	ts := time.Now().Format("15:04:05")
+	if pl.event != "" {
+		m.Log.Entries = append(m.Log.Entries, LogEntry{
+			Time: ts, Level: "EVENT",
+			Message: fmt.Sprintf("%s → %s", pl.event, pl.agent),
+		})
+	}
+	if pl.agent != "" && pl.tokens > 0 {
+		m.Log.Entries = append(m.Log.Entries, LogEntry{
+			Time: ts, Level: "AGENT",
+			Message: fmt.Sprintf("[%s/%s] dispatched (%d tokens)", pl.agent, pl.model, pl.tokens),
+		})
+	}
+	for _, e := range pl.entries {
+		m.Log.Entries = append(m.Log.Entries, LogEntry{Time: ts, Level: e.Level, Message: e.Message})
+	}
 }
 
 // Mission styles.

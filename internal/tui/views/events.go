@@ -23,13 +23,14 @@ type eventsWatchStartedMsg struct {
 
 type eventsStreamClosedMsg struct{}
 
-// EventsModel shows the real-time NATS event stream.
+// EventsModel shows the real-time NATS event stream and mission log.
 type EventsModel struct {
-	subscriber ports.EventSubscriber
-	events     []domain.PolicyUpdateEvent
-	eventCh    <-chan domain.PolicyUpdateEvent
-	cancel     context.CancelFunc
-	watching   bool
+	subscriber   ports.EventSubscriber
+	events       []domain.PolicyUpdateEvent
+	eventCh      <-chan domain.PolicyUpdateEvent
+	cancel       context.CancelFunc
+	watching     bool
+	MissionLog *SharedLog
 }
 
 func NewEventsModel(sub ports.EventSubscriber) EventsModel {
@@ -87,50 +88,92 @@ func (m EventsModel) Update(msg tea.Msg) (EventsModel, tea.Cmd) {
 	return m, nil
 }
 
+var (
+	logTime     = lipgloss.NewStyle().Foreground(lipgloss.Color("246"))
+	logInfo     = lipgloss.NewStyle().Foreground(lipgloss.Color("120"))
+	logWarn     = lipgloss.NewStyle().Foreground(lipgloss.Color("222")).Bold(true)
+	logCrit     = lipgloss.NewStyle().Foreground(lipgloss.Color("210")).Bold(true)
+	logEvent    = lipgloss.NewStyle().Foreground(lipgloss.Color("117")).Bold(true)
+	logAgent    = lipgloss.NewStyle().Foreground(lipgloss.Color("183"))
+	logNatsEvt  = lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
+	logNatsOk   = lipgloss.NewStyle().Foreground(lipgloss.Color("120")).Bold(true)
+	logNatsFilt = lipgloss.NewStyle().Foreground(lipgloss.Color("210"))
+)
+
+func levelStyle(level string) lipgloss.Style {
+	switch level {
+	case "WARN":
+		return logWarn
+	case "CRITICAL":
+		return logCrit
+	case "EVENT":
+		return logEvent
+	case "AGENT":
+		return logAgent
+	default:
+		return logInfo
+	}
+}
+
 func (m EventsModel) View() string {
 	var b strings.Builder
 
 	heading := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("147"))
-	b.WriteString(heading.Render("  SHIP'S LOG — EVENT STREAM"))
+	b.WriteString(heading.Render("  SHIP'S LOG"))
 	b.WriteString("\n\n")
 
-	if m.subscriber == nil {
+	// Mission log entries.
+	if m.MissionLog != nil && len(m.MissionLog.Entries) > 0 {
+		b.WriteString(heading.Render("  --- MISSION ---"))
+		b.WriteString("\n\n")
+
+		entries := m.MissionLog.Entries
+		start := 0
+		if len(entries) > 20 {
+			start = len(entries) - 20
+		}
+		for _, e := range entries[start:] {
+			ls := levelStyle(e.Level)
+			b.WriteString(fmt.Sprintf("  %s  %s  %s\n",
+				logTime.Render(e.Time),
+				ls.Render(fmt.Sprintf("%-8s", e.Level)),
+				ls.Render(e.Message),
+			))
+		}
+		b.WriteString("\n")
+	}
+
+	// NATS event stream.
+	if m.subscriber != nil {
+		b.WriteString(heading.Render("  --- NATS STREAM ---"))
+		b.WriteString("\n\n")
+
+		status := lipgloss.NewStyle().Foreground(lipgloss.Color("120")).Render("CONNECTED")
+		if !m.watching {
+			status = lipgloss.NewStyle().Foreground(lipgloss.Color("222")).Render("RECONNECTING...")
+		}
+		b.WriteString(fmt.Sprintf("  Status: %s\n\n", status))
+
+		if len(m.events) == 0 {
+			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("246")).Render(
+				"  Waiting for events..."))
+		} else {
+			start := 0
+			if len(m.events) > 10 {
+				start = len(m.events) - 10
+			}
+			for _, evt := range m.events[start:] {
+				b.WriteString(fmt.Sprintf("  %s  schedule=%s  written=%s  filtered=%s\n",
+					logNatsEvt.Render(evt.Ts),
+					evt.Schedule,
+					logNatsOk.Render(fmt.Sprintf("%d", evt.PoliciesWritten)),
+					logNatsFilt.Render(fmt.Sprintf("%d", evt.PoliciesFiltered)),
+				))
+			}
+		}
+	} else if m.MissionLog == nil || len(m.MissionLog.Entries) == 0 {
 		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("246")).Render(
-			"  No event stream configured. Start with --nats-url or --embedded flag."))
-		return b.String()
-	}
-
-	status := lipgloss.NewStyle().Foreground(lipgloss.Color("120")).Render("CONNECTED")
-	if !m.watching {
-		status = lipgloss.NewStyle().Foreground(lipgloss.Color("222")).Render("RECONNECTING...")
-	}
-	b.WriteString(fmt.Sprintf("  Status: %s\n", status))
-	b.WriteString(fmt.Sprintf("  Subject: %s\n\n",
-		lipgloss.NewStyle().Bold(true).Render("tool_learning.policy.updated")))
-
-	if len(m.events) == 0 {
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("246")).Render(
-			"  Waiting for events..."))
-		return b.String()
-	}
-
-	eventStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
-	written := lipgloss.NewStyle().Foreground(lipgloss.Color("120")).Bold(true)
-	filtered := lipgloss.NewStyle().Foreground(lipgloss.Color("210"))
-
-	// Show last 15 events.
-	start := 0
-	if len(m.events) > 15 {
-		start = len(m.events) - 15
-	}
-
-	for _, evt := range m.events[start:] {
-		b.WriteString(fmt.Sprintf("  %s  schedule=%s  written=%s  filtered=%s\n",
-			eventStyle.Render(evt.Ts),
-			evt.Schedule,
-			written.Render(fmt.Sprintf("%d", evt.PoliciesWritten)),
-			filtered.Render(fmt.Sprintf("%d", evt.PoliciesFiltered)),
-		))
+			"  No events yet. Start the mission (m) and advance with SPACE."))
 	}
 
 	return b.String()
