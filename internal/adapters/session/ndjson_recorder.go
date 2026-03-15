@@ -27,8 +27,8 @@ func NewNDJSONRecorder() (*NDJSONRecorder, error) {
 		return nil, fmt.Errorf("session recorder: %w", err)
 	}
 	dir := filepath.Join(home, ".config", "tlctl", "sessions")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("session dir: %w", err)
+	if mkdirErr := os.MkdirAll(dir, 0o700); mkdirErr != nil {
+		return nil, fmt.Errorf("session dir: %w", mkdirErr)
 	}
 	name := fmt.Sprintf("session_%s.ndjson", time.Now().Format("20060102T150405Z"))
 	path := filepath.Join(dir, name)

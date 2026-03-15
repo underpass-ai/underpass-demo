@@ -623,23 +623,24 @@ func (m MissionModel) renderKernelGraph(b *strings.Builder, bundle *domain.Conte
 		}
 
 		edges := children[nodeID]
-		for i, e := range edges {
-			childPrefix := prefix
-			if prefix == "" {
+		for i := range edges {
+			var childPrefix string
+			switch {
+			case prefix == "":
 				childPrefix = "    "
-			} else if last {
+			case last:
 				childPrefix = prefix + "     "
-			} else {
+			default:
 				childPrefix = prefix + "|    "
 			}
 
 			// Show relationship label if present (e.g. "Path A", "Path B").
-			if e.rel.Label != "" {
+			if edges[i].rel.Label != "" {
 				b.WriteString(mGrBdr.Render(childPrefix))
 				b.WriteString("\n")
 			}
 
-			walk(e.node.ID, childPrefix, i == len(edges)-1)
+			walk(edges[i].node.ID, childPrefix, i == len(edges)-1)
 		}
 	}
 
