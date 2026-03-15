@@ -25,11 +25,11 @@ type eventsStreamClosedMsg struct{}
 
 // EventsModel shows the real-time NATS event stream and mission log.
 type EventsModel struct {
-	subscriber   ports.EventSubscriber
-	events       []domain.PolicyUpdateEvent
-	eventCh      <-chan domain.PolicyUpdateEvent
-	cancel       context.CancelFunc
-	watching     bool
+	subscriber ports.EventSubscriber
+	events     []domain.PolicyUpdateEvent
+	eventCh    <-chan domain.PolicyUpdateEvent
+	cancel     context.CancelFunc
+	watching   bool
 	MissionLog *SharedLog
 }
 
@@ -134,11 +134,11 @@ func (m EventsModel) View() string {
 		}
 		for _, e := range entries[start:] {
 			ls := levelStyle(e.Level)
-			b.WriteString(fmt.Sprintf("  %s  %s  %s\n",
+			fmt.Fprintf(&b, "  %s  %s  %s\n",
 				logTime.Render(e.Time),
 				ls.Render(fmt.Sprintf("%-8s", e.Level)),
 				ls.Render(e.Message),
-			))
+			)
 		}
 		b.WriteString("\n")
 	}
@@ -152,7 +152,7 @@ func (m EventsModel) View() string {
 		if !m.watching {
 			status = lipgloss.NewStyle().Foreground(lipgloss.Color("222")).Render("RECONNECTING...")
 		}
-		b.WriteString(fmt.Sprintf("  Status: %s\n\n", status))
+		fmt.Fprintf(&b, "  Status: %s\n\n", status)
 
 		if len(m.events) == 0 {
 			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("246")).Render(
@@ -163,12 +163,12 @@ func (m EventsModel) View() string {
 				start = len(m.events) - 10
 			}
 			for _, evt := range m.events[start:] {
-				b.WriteString(fmt.Sprintf("  %s  schedule=%s  written=%s  filtered=%s\n",
+				fmt.Fprintf(&b, "  %s  schedule=%s  written=%s  filtered=%s\n",
 					logNatsEvt.Render(evt.Ts),
 					evt.Schedule,
 					logNatsOk.Render(fmt.Sprintf("%d", evt.PoliciesWritten)),
 					logNatsFilt.Render(fmt.Sprintf("%d", evt.PoliciesFiltered)),
-				))
+				)
 			}
 		}
 	} else if m.MissionLog == nil || len(m.MissionLog.Entries) == 0 {
