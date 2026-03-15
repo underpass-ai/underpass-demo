@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package underpass.rehydration.kernel.v1alpha1;
+
+option go_package = "github.com/underpass-ai/underpass-demo/internal/gen/kernelv1alpha1";
+
+import "underpass/rehydration/kernel/v1alpha1/common.proto";
+
+// CommandService provides graph mutation operations.
+service CommandService {
+  // UpsertNode creates or updates a node in the graph.
+  rpc UpsertNode(UpsertNodeRequest) returns (UpsertNodeResponse);
+
+  // CreateRelationship adds an edge between two existing nodes.
+  rpc CreateRelationship(CreateRelationshipRequest) returns (CreateRelationshipResponse);
+}
+
+message UpsertNodeRequest {
+  GraphNode node = 1;
+}
+
+message UpsertNodeResponse {
+  string node_id = 1;
+  bool created = 2;
+}
+
+message CreateRelationshipRequest {
+  GraphRelationship relationship = 1;
+}
+
+message CreateRelationshipResponse {
+  bool created = 1;
+}

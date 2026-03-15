@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package underpass.rehydration.kernel.v1alpha1;
+
+option go_package = "github.com/underpass-ai/underpass-demo/internal/gen/kernelv1alpha1";
+
+import "underpass/rehydration/kernel/v1alpha1/common.proto";
+
+// QueryService provides read-only access to the knowledge graph and
+// rehydration bundles.
+service QueryService {
+  // GetContext builds a rehydration bundle for the given root node,
+  // scoped by role, phase, and token budget.
+  rpc GetContext(GetContextRequest) returns (GetContextResponse);
+
+  // GetGraphRelationships returns a subgraph around a given node.
+  rpc GetGraphRelationships(GetGraphRelationshipsRequest) returns (GetGraphRelationshipsResponse);
+}
+
+message GetContextRequest {
+  string root_node_id = 1;
+  string role = 2;
+  string phase = 3;
+  uint32 token_budget = 4;
+  repeated string scopes = 5;
+}
+
+message GetContextResponse {
+  string root_node_id = 1;
+  repeated GraphNode nodes = 2;
+  repeated GraphRelationship relationships = 3;
+  repeated NodeDetail details = 4;
+  repeated BundleSection sections = 5;
+  uint32 token_count = 6;
+  string content_hash = 7;
+  string snapshot_id = 8;
+}
+
+message GetGraphRelationshipsRequest {
+  string node_id = 1;
+  string node_kind = 2;
+  uint32 depth = 3;
+}
+
+message GetGraphRelationshipsResponse {
+  GraphNode root = 1;
+  repeated GraphNode neighbors = 2;
+  repeated GraphRelationship relationships = 3;
+}

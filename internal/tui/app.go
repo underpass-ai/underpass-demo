@@ -43,8 +43,10 @@ func viewName(v View) string {
 
 // Deps groups all injected dependencies for the TUI.
 type Deps struct {
-	PolicyReader ports.PolicyReader
-	EventSub     ports.EventSubscriber
+	PolicyReader    ports.PolicyReader
+	EventSub        ports.EventSubscriber
+	ContextProvider ports.ContextProvider
+	SessionRecorder ports.SessionRecorder
 }
 
 // Model is the root Bubble Tea model following fleetctl's pattern.
@@ -72,7 +74,7 @@ func NewModel(deps Deps) Model {
 	return Model{
 		currentView: ViewMission,
 		deps:        deps,
-		mission:     views.NewMissionModel(deps.PolicyReader, sharedLog),
+		mission:     views.NewMissionModel(deps.PolicyReader, deps.ContextProvider, deps.SessionRecorder, sharedLog),
 		bridge:      views.NewDashboardModel(deps.PolicyReader),
 		systems:     views.NewRankingsModel(deps.PolicyReader),
 		sampling:    views.NewSamplingModel(deps.PolicyReader),

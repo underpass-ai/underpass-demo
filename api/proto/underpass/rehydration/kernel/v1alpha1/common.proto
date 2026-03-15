@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package underpass.rehydration.kernel.v1alpha1;
+
+option go_package = "github.com/underpass-ai/underpass-demo/internal/gen/kernelv1alpha1";
+
+// GraphNode represents a node in the task/knowledge graph.
+message GraphNode {
+  string id = 1;
+  string kind = 2;         // e.g. "mission", "task", "decision"
+  string label = 3;
+  string status = 4;       // e.g. "done", "active", "pending", "abandoned"
+  map<string, string> metadata = 5;
+}
+
+// GraphRelationship represents an edge between two graph nodes.
+message GraphRelationship {
+  string source_id = 1;
+  string target_id = 2;
+  string kind = 3;         // e.g. "has_subtask", "branched_from", "depends_on"
+  string label = 4;
+}
+
+// NodeDetail provides extended information for a graph node.
+message NodeDetail {
+  string node_id = 1;
+  string title = 2;
+  string description = 3;
+  map<string, string> properties = 4;
+}
+
+// BundleSection is a rendered section of a rehydration bundle.
+message BundleSection {
+  string heading = 1;
+  string content = 2;
+  uint32 token_count = 3;
+}
