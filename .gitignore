@@ -1,4 +1,3 @@
 bin/
 /tlctl
 *.exe
-internal/gen/
